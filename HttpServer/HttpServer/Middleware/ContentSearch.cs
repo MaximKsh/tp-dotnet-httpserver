@@ -53,18 +53,18 @@ namespace HttpServer.Middleware
             
             if (path == "/")
             {
-                path = this.settings.DefaultUrl;
+                path = this.settings.DefaultDirectioryFile;
             }
             else if (path[path.Length - 1] == '/')
             {
-                path = path + this.settings.DefaultUrl;
+                path = path + this.settings.DefaultDirectioryFile;
             }
             if (path[0] == '/')
             {
                 path = path.Substring(1);
             }
             
-            var absolutePath = Path.Combine(this.settings.DirectoryRoot, path);
+            var absolutePath = Path.Combine(this.settings.DocumentRoot, path);
             FileInfo fileInfo;
             try
             {
@@ -77,7 +77,7 @@ namespace HttpServer.Middleware
             
             if (fileInfo == null
                 || !fileInfo.Exists
-                || !fileInfo.FullName.StartsWith(this.settings.DirectoryRoot))
+                || !fileInfo.FullName.StartsWith(this.settings.DocumentRoot))
             {
                 response.HttpStatusCode = HttpStatusCode.NotFound;
                 return;

@@ -2,7 +2,7 @@
 
 namespace HttpServer.Middleware
 {
-    public class HttpRequestParser: IHttpServerMiddleware
+    public class RequestParser: IHttpServerMiddleware
     {
         #region constants
         
@@ -40,8 +40,15 @@ namespace HttpServer.Middleware
                 response.HttpStatusCode = HttpStatusCode.BadRequest;
                 return;
             }
-            // По первой строке определим тип перевода строк
             var firstLine = lines[0];
+            if (string.IsNullOrWhiteSpace(firstLine))
+            {
+                response.Success = false;
+                response.HttpStatusCode = HttpStatusCode.BadRequest;
+                return;
+            }
+            
+            // По первой строке определим тип перевода строк
             request.UseCrLf = firstLine[firstLine.Length - 1] == '\r';
             response.UseCrLf = request.UseCrLf;
             

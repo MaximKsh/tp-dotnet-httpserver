@@ -1,7 +1,10 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Net.Sockets;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using HttpServer.Middleware;
 
@@ -18,16 +21,16 @@ namespace HttpServer
         private const int ReceiveTimeoutMs = 10_000;
 
         private readonly List<IHttpServerMiddleware> middleware;
+
+        private readonly ServerSettings settings;
         
-        public HttpServer()
+        public HttpServer(ServerSettings settings)
         {
-            var settings = new ServerSettings(
-                "/home/maxim/http-test-suite",
-                "index.html");
+            this.settings = settings;
             
             this.middleware = new List<IHttpServerMiddleware>
             {
-                new HttpRequestParser(),
+                new RequestParser(),
                 new ContentSearch(settings),
                 new DefaultHeadersWriter(),
                 new ConnectionManager(),
@@ -35,9 +38,17 @@ namespace HttpServer
             };
         }
         
-        public async Task RunServer(short port)
+        public async Task RunServer()
         {
-            var tcpListener = TcpListener.Create(port);
+            Console.WriteLine("Server started.");
+            Console.WriteLine($"Port: {this.settings.Port}");
+            Console.WriteLine($"DocumentRoot: {this.settings.DocumentRoot}");
+            if (this.settings.ThreadLimit > 0)
+            {
+                Console.WriteLine($"ThreadPool.SetMaxThreads({this.settings.ThreadLimit}, {this.settings.ThreadLimit})");
+                ThreadPool.SetMaxThreads(this.settings.ThreadLimit, this.settings.ThreadLimit);
+            }
+            var tcpListener = TcpListener.Create(this.settings.Port);
             tcpListener.Start();
             while (true)
             {
@@ -51,23 +62,57 @@ namespace HttpServer
             tcpClient.SendTimeout = SendTimeoutMs;
             tcpClient.ReceiveTimeout = ReceiveTimeoutMs;
 
-            using (var stream = tcpClient.GetStream())
+            var connectionId = Guid.NewGuid().ToString();
+            try
             {
-                var rawContent = await ReadRequest(stream);
-
-                var request = new HttpRequest(rawContent);
-                var response = new HttpResponse();
-                foreach (var m in this.middleware)
+                Console.WriteLine($"[{connectionId}]: begin request");
+                using (var stream = tcpClient.GetStream())
                 {
-                    m.Invoke(request, response);
-                }
+                    var stopWatch = new Stopwatch();
+                    stopWatch.Start();
 
-                await SendResponse(
-                    stream,
-                    response.RawHeadersResponse, 
-                    response.ResponseContentFilePath);
+                    var rawContent = await ReadRequest(stream);
+
+                    var request = new HttpRequest(rawContent);
+                    var response = new HttpResponse();
+                    foreach (var m in this.middleware)
+                    {
+                        try
+                        {
+                            m.Invoke(request, response);
+                        }
+                        catch (Exception)
+                        {
+                            Console.WriteLine($"[{connectionId}]: {m.GetType().FullName}");
+                            throw;
+                        }
+                    }
+
+                    await SendResponse(
+                        stream,
+                        response.RawHeadersResponse,
+                        response.ResponseContentFilePath);
+
+                    stopWatch.Stop();
+                    Console.WriteLine($"[{connectionId}]: response complete in {stopWatch.ElapsedMilliseconds} ms");
+                }
             }
-            tcpClient.Close();
+            catch (Exception e)
+            {
+                Console.WriteLine($"[{connectionId}]: Exception occured {e.Message}\n{e.StackTrace}");
+            }
+            finally
+            {
+                try
+                {
+                    tcpClient.Close();
+                    Console.WriteLine($"[{connectionId}]: connection close");
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine($"[{connectionId}]: Exception occured {e.Message}\n{e.StackTrace}");
+                }
+            }
         }
 
         private static async Task<string> ReadRequest(NetworkStream stream)
@@ -103,6 +148,17 @@ namespace HttpServer
                     await fileStream.CopyToAsync(stream);
                 }
             }
+        }
+
+        
+        private static void LogRequest(string id, string content)
+        {
+            Console.WriteLine($"[{id}]: Request:\n{content}");
+        }
+
+        private static void LogResponse(string id, string response)
+        {
+            Console.WriteLine($"[{id}]: Response headers:\n{response}");
         }
 
     }
