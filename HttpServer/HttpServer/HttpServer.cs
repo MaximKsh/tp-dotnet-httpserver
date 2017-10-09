@@ -16,9 +16,9 @@ namespace HttpServer
 
         private const int InitialBuilderCapacity = 32 * BufferSize;
 
-        private const int SendTimeoutMs = 10_000;
+        private const int SendTimeoutMsPerKb = 5_000;
         
-        private const int ReceiveTimeoutMs = 10_000;
+        private const int ReceiveTimeoutMs = 5_000;
 
         private readonly List<IHttpServerMiddleware> middleware;
 
@@ -33,7 +33,8 @@ namespace HttpServer
                 new RequestParser(),
                 new ContentSearch(settings),
                 new DefaultHeadersWriter(),
-                new ConnectionManager(),
+                //new ConnectionManager(),
+                new DummyConnectionManager(),
                 new ResponseWriter(),
             };
         }
@@ -47,6 +48,7 @@ namespace HttpServer
             {
                 Console.WriteLine($"ThreadPool.SetMaxThreads({this.settings.ThreadLimit}, {this.settings.ThreadLimit})");
                 ThreadPool.SetMaxThreads(this.settings.ThreadLimit, this.settings.ThreadLimit);
+                
             }
             var tcpListener = TcpListener.Create(this.settings.Port);
             tcpListener.Start();
@@ -59,58 +61,65 @@ namespace HttpServer
 
         private async Task StartProcessConnect(TcpClient tcpClient)
         {
-            tcpClient.SendTimeout = SendTimeoutMs;
-            tcpClient.ReceiveTimeout = ReceiveTimeoutMs;
-
             var connectionId = Guid.NewGuid().ToString();
             try
             {
-                Console.WriteLine($"[{connectionId}]: begin request");
+                Log(connectionId, "begin request");
                 using (var stream = tcpClient.GetStream())
                 {
-                    var stopWatch = new Stopwatch();
-                    stopWatch.Start();
-
-                    var rawContent = await ReadRequest(stream);
-
-                    var request = new HttpRequest(rawContent);
-                    var response = new HttpResponse();
-                    foreach (var m in this.middleware)
+                    var keepConnection = false;
+                    do
                     {
-                        try
-                        {
-                            m.Invoke(request, response);
-                        }
-                        catch (Exception)
-                        {
-                            Console.WriteLine($"[{connectionId}]: {m.GetType().FullName}");
-                            throw;
-                        }
-                    }
+                        var stopWatch = new Stopwatch();
+                        stopWatch.Start();
 
-                    await SendResponse(
-                        stream,
-                        response.RawHeadersResponse,
-                        response.ResponseContentFilePath);
+                        var rawContent = await ReadRequest(stream);
 
-                    stopWatch.Stop();
-                    Console.WriteLine($"[{connectionId}]: response complete in {stopWatch.ElapsedMilliseconds} ms");
+                        // LogRequest(connectionId, rawContent);
+                        
+                        var request = new HttpRequest(rawContent);
+                        var response = new HttpResponse();
+                        foreach (var m in this.middleware)
+                        {
+                            try
+                            {
+                                m.Invoke(request, response);
+                            }
+                            catch (Exception)
+                            {
+                                Log(connectionId, $" in middleware {m.GetType().FullName}");
+                                throw;
+                            }
+                        }
+
+                        // LogResponse(connectionId, response.RawHeadersResponse);
+                        
+                        await SendResponse(
+                            stream,
+                            response.RawHeadersResponse,
+                            response.ResponseContentFilePath,
+                            response.ContentLength);
+
+                        stopWatch.Stop();
+                        Log(connectionId, $"response complete in {stopWatch.ElapsedMilliseconds} ms");
+
+                        keepConnection = response.KeepAlive;
+                    } while (keepConnection);
                 }
             }
             catch (Exception e)
             {
-                Console.WriteLine($"[{connectionId}]: Exception occured {e.Message}\n{e.StackTrace}");
+                Log(connectionId, $"Exception occured {e.Message}\n{e.StackTrace}");
             }
             finally
             {
                 try
                 {
-                    tcpClient.Close();
-                    Console.WriteLine($"[{connectionId}]: connection close");
+                    Log(connectionId, "connection close");
                 }
                 catch (Exception e)
                 {
-                    Console.WriteLine($"[{connectionId}]: Exception occured {e.Message}\n{e.StackTrace}");
+                    Log(connectionId, $"Exception occured {e.Message}\n{e.StackTrace}");
                 }
             }
         }
@@ -120,15 +129,19 @@ namespace HttpServer
             var buf = new byte[BufferSize];
             var builder = new StringBuilder(InitialBuilderCapacity);
             
-            do
+            using (var cancellationTokenSource = new CancellationTokenSource(ReceiveTimeoutMs))
+            using (cancellationTokenSource.Token.Register(stream.Close))
             {
-                var readpos = 0;
                 do
                 {
-                    readpos += await stream.ReadAsync(buf, readpos, BufferSize - readpos);
-                } while (readpos < BufferSize && stream.DataAvailable);
-                builder.Append(Encoding.UTF8.GetString(buf, 0, readpos));
-            } while (stream.DataAvailable);
+                    var readpos = 0;
+                    do
+                    {
+                        readpos += await stream.ReadAsync(buf, readpos, BufferSize - readpos, cancellationTokenSource.Token);
+                    } while (readpos < BufferSize && stream.DataAvailable);
+                    builder.Append(Encoding.UTF8.GetString(buf, 0, readpos));
+                } while (stream.DataAvailable);
+            }
             
             return builder.ToString();
         }
@@ -136,18 +149,33 @@ namespace HttpServer
         private static async Task SendResponse(
             NetworkStream stream,
             string head,
-            string contentFilename)
+            string contentFilename,
+            long contentLength)
         {
-            var bytes = Encoding.UTF8.GetBytes(head);
-            await stream.WriteAsync(bytes, 0, bytes.Length);
-            
-            if (contentFilename != null)
+            var timeout = SendTimeoutMsPerKb;
+            if (contentFilename != null && contentLength > 0)
             {
-                using (var fileStream = new FileStream(contentFilename, FileMode.Open))
+                timeout *= ((int) Math.Min(contentLength, int.MaxValue) / 1024) + 1;
+            }
+            using (var cancellationTokenSource = new CancellationTokenSource(timeout))
+            using (cancellationTokenSource.Token.Register(stream.Close))
+            {
+                var bytes = Encoding.UTF8.GetBytes(head);
+                await stream.WriteAsync(bytes, 0, bytes.Length, cancellationTokenSource.Token);
+            
+                if (contentFilename != null)
                 {
-                    await fileStream.CopyToAsync(stream);
+                    using (var fileStream = new FileStream(contentFilename, FileMode.Open))
+                    {
+                        await fileStream.CopyToAsync(stream, 81920, cancellationTokenSource.Token);
+                    }
                 }
             }
+        }
+
+        private static void Log(string id, string text)
+        {
+            Console.WriteLine($"[{id}, {Thread.CurrentThread.ManagedThreadId}]: {text}.");
         }
 
         

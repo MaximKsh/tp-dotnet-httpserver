@@ -1,4 +1,5 @@
-﻿using System.Text;
+﻿using System.IO;
+using System.Text;
 
 namespace HttpServer.Middleware
 {
@@ -32,33 +33,58 @@ namespace HttpServer.Middleware
                 return;
             }
             
-            var lines = request.RawRequest.Split('\n');
+            foreach (var ch in request.RawRequest)
+            {
+                if (ch == '\r')
+                {
+                    request.UseCrLf = true;
+                    response.UseCrLf = true;
+                }
+                else if (ch == '\n')
+                {
+                    break;
+                }
+            }
+
+            var lineCount = 0;
+            using (var stream = new StringReader(request.RawRequest))
+            {
+                var firstLine = stream.ReadLine();
+                if (string.IsNullOrWhiteSpace(firstLine))
+                {
+                    response.Success = false;
+                    response.HttpStatusCode = HttpStatusCode.BadRequest;
+                    return;
+                }
             
-            if (lines.Length == 0)
+                if (!ParseRequestLine(firstLine, request, response))
+                {
+                    return;
+                }
+                response.HttpVersion = request.HttpVersion;
+                lineCount++;
+
+                string line;
+                var headers = request.Headers;
+                while ((line = stream.ReadLine()) != null
+                       && !string.IsNullOrWhiteSpace(line))
+                {
+                    var colonIndex = line.IndexOf(Colon);
+                    if (colonIndex < 1 
+                        || line.Length == colonIndex - 1)
+                    {
+                        response.HttpStatusCode = HttpStatusCode.BadRequest;
+                        return;
+                    }
+                    headers[line.Substring(0, colonIndex).Trim()] = line.Substring(colonIndex + 1).Trim();
+                }
+            }
+            
+            if (lineCount == 0)
             {
                 response.Success = false;
                 response.HttpStatusCode = HttpStatusCode.BadRequest;
-                return;
             }
-            var firstLine = lines[0];
-            if (string.IsNullOrWhiteSpace(firstLine))
-            {
-                response.Success = false;
-                response.HttpStatusCode = HttpStatusCode.BadRequest;
-                return;
-            }
-            
-            // По первой строке определим тип перевода строк
-            request.UseCrLf = firstLine[firstLine.Length - 1] == '\r';
-            response.UseCrLf = request.UseCrLf;
-            
-            if (!ParseRequestLine(firstLine, request, response))
-            {
-                return;
-            }
-            response.HttpVersion = request.HttpVersion;
-            
-            ParseHeaders(lines, request, response);
         }
 
         private static bool ParseRequestLine(string line, HttpRequest request, HttpResponse response)
@@ -234,28 +260,6 @@ namespace HttpServer.Middleware
             response.Success = false;
             response.HttpStatusCode = HttpStatusCode.BadRequest;
             return false;
-        }
-
-        private static void ParseHeaders(
-            string[] lines,
-            HttpRequest request,
-            HttpResponse response)
-        {
-            // Первую строку отбрасываем, там строка запроса.
-            var headers = request.Headers;
-            var count = lines.Length;
-            for (var i = 1; i < count && !string.IsNullOrWhiteSpace(lines[i]); i++)
-            {
-                var line = lines[i];
-                var colonIndex = line.IndexOf(Colon);
-                if (colonIndex < 1 
-                    || line.Length == colonIndex - 1)
-                {
-                    response.HttpStatusCode = HttpStatusCode.BadRequest;
-                    return;
-                }
-                headers[line.Substring(0, colonIndex).Trim()] = line.Substring(colonIndex + 1).Trim();
-            }
         }
         
         #endregion

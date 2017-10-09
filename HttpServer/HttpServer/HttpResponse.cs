@@ -31,5 +31,9 @@ namespace HttpServer
         public string ResponseContentFilePath { get; set; }
         
         public bool UseCrLf { get; set; } = false;
+
+        public bool KeepAlive { get; set; } = false;
+        
+        public long ContentLength { get; set; }
     }
 }

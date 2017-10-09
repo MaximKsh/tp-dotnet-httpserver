@@ -85,6 +85,7 @@ namespace HttpServer.Middleware
 
             response.HttpStatusCode = HttpStatusCode.Ok;
             response.Headers["Content-Length"] = fileInfo.Length.ToString();
+            response.ContentLength = fileInfo.Length;
             if (PossibleContentTypes.TryGetValue(fileInfo.Extension, out var ct))
             {
                 response.Headers["Content-Type"] = ct;
