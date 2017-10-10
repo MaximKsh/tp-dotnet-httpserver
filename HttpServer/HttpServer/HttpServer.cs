@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Net.Sockets;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -75,7 +76,7 @@ namespace HttpServer
 
                         var rawContent = await ReadRequest(stream);
 
-                        // LogRequest(connectionId, rawContent);
+                        LogRequest(connectionId, rawContent);
                         
                         var request = new HttpRequest(rawContent);
                         var response = new HttpResponse();
@@ -92,7 +93,7 @@ namespace HttpServer
                             }
                         }
 
-                        // LogResponse(connectionId, response.RawHeadersResponse);
+                        LogResponse(connectionId, response.RawHeadersResponse);
                         
                         await SendResponse(
                             stream,
@@ -173,20 +174,22 @@ namespace HttpServer
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void Log(string id, string text)
         {
-            Console.WriteLine($"[{id}, {Thread.CurrentThread.ManagedThreadId}]: {text}.");
+            // Console.WriteLine($"[{id}, {Thread.CurrentThread.ManagedThreadId}]: {text}.");
         }
 
-        
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void LogRequest(string id, string content)
         {
-            Console.WriteLine($"[{id}]: Request:\n{content}");
+            // Console.WriteLine($"[{id}]: Request:\n{content}");
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void LogResponse(string id, string response)
         {
-            Console.WriteLine($"[{id}]: Response headers:\n{response}");
+            // Console.WriteLine($"[{id}]: Response headers:\n{response}");
         }
 
     }
