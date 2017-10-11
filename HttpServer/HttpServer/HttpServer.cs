@@ -110,7 +110,7 @@ namespace HttpServer
             }
             catch (Exception e)
             {
-                Log(connectionId, $"Exception occured {e.Message}\n{e.StackTrace}");
+                Log(connectionId, $"Exception occured {e.GetType().FullName} \n {e.Message}\n{e.StackTrace}");
             }
             finally
             {
@@ -120,7 +120,7 @@ namespace HttpServer
                 }
                 catch (Exception e)
                 {
-                    Log(connectionId, $"Exception occured {e.Message}\n{e.StackTrace}");
+                    Log(connectionId, $"Exception occured {e.GetType().FullName} \n {e.Message}\n{e.StackTrace}");
                 }
             }
         }
@@ -166,7 +166,7 @@ namespace HttpServer
             
                 if (contentFilename != null)
                 {
-                    using (var fileStream = new FileStream(contentFilename, FileMode.Open))
+                    using (var fileStream = new FileStream(contentFilename, FileMode.Open, FileAccess.Read))
                     {
                         await fileStream.CopyToAsync(stream, 81920, cancellationTokenSource.Token);
                     }
@@ -177,7 +177,7 @@ namespace HttpServer
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void Log(string id, string text)
         {
-            // Console.WriteLine($"[{id}, {Thread.CurrentThread.ManagedThreadId}]: {text}.");
+             Console.WriteLine($"[{id}]: {text}.");
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
