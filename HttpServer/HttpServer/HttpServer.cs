@@ -110,7 +110,7 @@ namespace HttpServer
             }
             catch (Exception e)
             {
-                Log(connectionId, $"Exception occured {e.GetType().FullName} \n {e.Message}\n{e.StackTrace}");
+                Error(connectionId, e);
             }
             finally
             {
@@ -120,7 +120,7 @@ namespace HttpServer
                 }
                 catch (Exception e)
                 {
-                    Log(connectionId, $"Exception occured {e.GetType().FullName} \n {e.Message}\n{e.StackTrace}");
+                    Error(connectionId, e);
                 }
             }
         }
@@ -177,7 +177,13 @@ namespace HttpServer
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static void Log(string id, string text)
         {
-             Console.WriteLine($"[{id}]: {text}.");
+             // Console.WriteLine($"[{id}]: {text}.");
+        }
+        
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static void Error(string id, Exception e)
+        {
+            Console.WriteLine($"[{id}]: Exception occured {e.GetType().FullName}\n{e.Message}\n{e.StackTrace}.");
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
