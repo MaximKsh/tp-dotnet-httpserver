@@ -6,6 +6,7 @@ namespace HttpServer
     {
         Ok,
         BadRequest,
+        Forbidden,
         NotFound,
         NotAllowed,
         InternalServerError,
@@ -21,6 +22,8 @@ namespace HttpServer
                     return "200 OK";
                 case HttpStatusCode.BadRequest:
                     return "400 Bad Request";
+                case HttpStatusCode.Forbidden:
+                    return "403 Forbidden";
                 case HttpStatusCode.NotFound:
                     return "404 Not Found";
                 case HttpStatusCode.NotAllowed:

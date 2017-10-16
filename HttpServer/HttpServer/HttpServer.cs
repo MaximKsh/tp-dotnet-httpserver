@@ -34,7 +34,7 @@ namespace HttpServer
                 new RequestParser(),
                 new ContentSearch(settings),
                 new DefaultHeadersWriter(),
-                //new ConnectionManager(),
+                // new ConnectionManager(),
                 new DummyConnectionManager(),
                 new ResponseWriter(),
             };
@@ -51,13 +51,22 @@ namespace HttpServer
                 ThreadPool.SetMaxThreads(this.settings.ThreadLimit, this.settings.ThreadLimit);
                 
             }
-            var tcpListener = TcpListener.Create(this.settings.Port);
-            tcpListener.Start();
-            while (true)
+            TcpListener tcpListener = null;
+            try
             {
-                var tcpClient = await tcpListener.AcceptTcpClientAsync();
-                this.StartProcessConnect(tcpClient); 
+                tcpListener = TcpListener.Create(this.settings.Port);
+                tcpListener.Start();
+                while (true)
+                {
+                    var tcpClient = await tcpListener.AcceptTcpClientAsync();
+                    this.StartProcessConnect(tcpClient);
+                }
             }
+            finally
+            {
+                tcpListener?.Stop();
+            }
+            
         }
 
         private async Task StartProcessConnect(TcpClient tcpClient)
@@ -103,7 +112,6 @@ namespace HttpServer
 
                         stopWatch.Stop();
                         Log(connectionId, $"response complete in {stopWatch.ElapsedMilliseconds} ms");
-
                         keepConnection = response.KeepAlive;
                     } while (keepConnection);
                 }
@@ -116,6 +124,7 @@ namespace HttpServer
             {
                 try
                 {
+                    tcpClient.Close();
                     Log(connectionId, "connection close");
                 }
                 catch (Exception e)

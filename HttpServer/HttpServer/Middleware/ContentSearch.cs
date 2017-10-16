@@ -50,13 +50,16 @@ namespace HttpServer.Middleware
                 response.HttpStatusCode = HttpStatusCode.BadRequest;
                 return;
             }
-            
+
+
+            var need403 = false;
             if (path == "/")
             {
                 path = this.settings.DefaultDirectioryFile;
             }
             else if (path[path.Length - 1] == '/')
             {
+                need403 = true;
                 path = path + this.settings.DefaultDirectioryFile;
             }
             if (path[0] == '/')
@@ -79,7 +82,9 @@ namespace HttpServer.Middleware
                 || !fileInfo.Exists
                 || !fileInfo.FullName.StartsWith(this.settings.DocumentRoot))
             {
-                response.HttpStatusCode = HttpStatusCode.NotFound;
+                response.HttpStatusCode = need403 
+                    ? HttpStatusCode.Forbidden
+                    : HttpStatusCode.NotFound;
                 return;
             }
 
