@@ -1,6 +1,9 @@
-# i5-6200U, DDR4-2133, SSD
+# Nginx
 
-maxim@maximPC:~$ ab -n 1000 -c 100 http://localhost:80/httptest/wikipedia_russia.html
+Hardware: i5-6200U, DDR4-2133, SSD
+
+```
+$ ab -n 1000 -c 100 http://localhost:80/httptest/wikipedia_russia.html
 This is ApacheBench, Version 2.3 <$Revision: 1757674 $>
 Copyright 1996 Adam Twiss, Zeus Technology Ltd, http://www.zeustech.net/
 Licensed to The Apache Software Foundation, http://www.apache.org/
@@ -216,5 +219,5 @@ Percentage of the requests served within a certain time (ms)
   98%     29
   99%     31
  100%     32 (longest request)
-maxim@maximPC:~$ 
+```
 
